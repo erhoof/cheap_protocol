@@ -13,3 +13,8 @@ cd build
 cmake ..
 make -j$(nproc)
 ```
+
+## Notes
+- It was tested on Fedora 41 x86_64
+- It requires Little Endian CPU
+- On incorrect message execution stops
