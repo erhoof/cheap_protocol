@@ -226,6 +226,9 @@ void applyMask(Message *msg, uint32_t mask) {
         ((uint32_t *)msg->data)[i] = htonl(value);
         printf(" After: %08X\n", value);
     }
+
+    // Update CRC32
+    msg->crc32 = crc32(msg->data, msg->dataLength);
 }
 
 int checkMessage(FILE *inFile) {
