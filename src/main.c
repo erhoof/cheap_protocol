@@ -17,26 +17,6 @@ typedef struct {
     uint8_t *data;
 } Message;
 
-unsigned int crc32b(uint8_t *message, int len) {
-   int i, j;
-   uint8_t byte;
-   uint32_t crc, mask;
-
-   i = 0;
-   crc = 0xFFFFFFFF;
-   while (len) {
-      byte = message[i];            // Get next byte.
-      crc = crc ^ byte;
-      for (j = 7; j >= 0; j--) {    // Do eight times.
-         mask = -(crc & 1);
-         crc = (crc >> 1) ^ (0x04C11DB7 & mask);
-      }
-      i = i + 1;
-      len = len - 1;
-   }
-   return ~crc;
-}
-
 int main(int argc, char *argv[]) {
     FILE *inFile = fopen(IN_FILENAME, "r");
     if(!inFile) {
@@ -87,11 +67,15 @@ int main(int argc, char *argv[]) {
                 perror("Conversion error");
                 return EXIT_FAILURE;
             }
+
+            // TODO: add checks
+            // As payload is DATA + CRC32
+            msg.length = msg.length - sizeof(msg.crc32);
         }
 
         // Payload
         {
-            const int lenInHEX = (msg.length - sizeof(msg.crc32)) * 2;
+            const int lenInHEX = (msg.length) * 2;
 
             char *dataHexString = malloc(lenInHEX);
             if(!dataHexString) {
@@ -107,7 +91,7 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
 
-            printf("Allocated %p of %zu bytes for message data\n", msg.data, msg.length - sizeof(msg.crc32));
+            printf("Allocated %p of %zu bytes for message data\n", msg.data, msg.length);
 
             int rc = fread(dataHexString, sizeof(dataHexString[0]), lenInHEX, inFile);
             if(lenInHEX != rc) {
@@ -115,7 +99,7 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE; // no need to free memory, closing anyway
             }
 
-            rc = hexToBinary(msg.data, msg.length - sizeof(msg.crc32), dataHexString, lenInHEX);
+            rc = hexToBinary(msg.data, msg.length, dataHexString, lenInHEX);
             if(rc <= 0) {
                 perror("Conversion error");
                 return EXIT_FAILURE;
@@ -143,17 +127,18 @@ int main(int argc, char *argv[]) {
 
         printf("Got new message:\n");
         printf("  Type: %d\n", msg.type);
-        printf("  Payload length: %d\n", msg.length);
-        printf("  Data length: %zu\n", msg.length - sizeof(msg.crc32));
+        printf("  Payload length: %d\n", msg.length + sizeof(crc32_t));
+        printf("  Data length: %zu\n", msg.length);
         printf("  Data pointer: %p\n", msg.data);
         printf("  CRC32: %08X\n", msg.crc32);
         printf("  Dump:  ");
-        for (size_t i = 0; i < msg.length - sizeof(msg.crc32); i++) {
+        for (size_t i = 0; i < msg.length; i++) {
             printf("%02X ", msg.data[i]);
         }
         printf("\n");
 
         // Required mask to apply
+        uint32_t mask;
         {
             // 'mask=' header
             {
@@ -173,8 +158,6 @@ int main(int argc, char *argv[]) {
 
             // Mask itself (CRC32 in HEX)
             {
-                crc32_t mask;
-
                 char hexValue[sizeof(crc32_t) * 2]; // ex. AABBCCDD
                 int rc = fread(hexValue, sizeof(hexValue[0]), sizeof(hexValue), inFile);
                 if(sizeof(hexValue) != rc) {
@@ -196,7 +179,7 @@ int main(int argc, char *argv[]) {
 
         // Check message CRC32
         {
-            crc32_t checksum = crc32(msg.data, msg.length - sizeof(crc32_t));
+            crc32_t checksum = crc32(msg.data, msg.length);
             printf("Checking package CRC32:\n");
             printf("  CRC32: %08X\n", checksum);
 
@@ -204,8 +187,43 @@ int main(int argc, char *argv[]) {
                 perror("Checksum of message is invalid");
                 return EXIT_FAILURE;
             } else {
-                printf("Checksum of message is correct!");
+                printf("Checksum of message is correct!\n");
             }
+        }
+
+        // Zero padding
+        // TODO: move 4 somewhere
+        size_t padding = msg.length % 4;
+        if(padding) {
+            printf("Padding is required, adding %zu more bytes\n", (4 - padding));
+
+            msg.length = msg.length + (4 - padding);
+            msg.data = realloc(msg.data, msg.length);
+            if(!msg.data) {
+                perror("Allocation error");
+                return EXIT_FAILURE;
+            }
+            printf("Reallocated data of message, current pointer: %p\n", msg.data);
+
+            memset(msg.data + msg.length - padding, 0, padding);
+        }
+
+        // Apply mask
+        {
+            printf("Applying mask: \n");
+            for (size_t i = 1; i < msg.length / 4; i++) {
+                uint32_t value = htonl(((uint32_t *)msg.data)[i]);
+                printf(" Before: %08X\n", value);
+                value &= mask;
+                ((uint32_t *)msg.data)[i] = htonl(value);
+                printf(" After: %08X\n", value);
+            }
+
+            printf("  Dump (after mask):  ");
+            for (size_t i = 0; i < msg.length; i++) {
+                printf("%02X ", msg.data[i]);
+            }
+            printf("\n");
         }
     }
 
