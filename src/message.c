@@ -221,6 +221,7 @@ int addPadding(Message *msg) {
 
 void applyMask(Message *msg, uint32_t mask) {
     printf("Applying mask: \n");
+    // divides by 4 to handle as uint32_t, adds 2 to use only for even parts, starts from 1 for the same reason
     for(size_t i = 1; i < msg->dataLength / 4; i += 2) {
         uint32_t value = htonl(((uint32_t *)msg->data)[i]);
         printf(" Before: %08X\n", value);
