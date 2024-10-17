@@ -4,6 +4,7 @@
 #define ERR_SYS -1000
 #define ERR_SYS_FILE_READ -1001
 #define ERR_SYS_FILE_LENGTH -1002
+#define ERR_SYS_FILE_EOF -1003
 
 #define ERR_MSG -2000
 #define ERR_MSG_FORMAT -2001

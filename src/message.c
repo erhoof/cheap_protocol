@@ -22,6 +22,9 @@ void handleError(FILE *outFile, int error) {
         case ERR_SYS_FILE_LENGTH:
             fprintf(outFile, "File length error");
             break;
+        case ERR_SYS_FILE_EOF:
+            fprintf(outFile, "End of file");
+            break;
         case ERR_MSG_FORMAT:
             fprintf(outFile, "Message format is wrong");
             break;
@@ -129,18 +132,18 @@ int readCRC32(FILE *inFile, Message *msg) {
     return 0;
 }
 
-void dumpMessage(Message *msg) {
-    printf("Message:\n");
-    printf("  Type: %d\n", msg->type);
-    printf("  Payload length: %d\n", msg->payloadLength);
-    printf("  Data length: %zu\n", msg->dataLength);
-    printf("  Data pointer: %p\n", msg->data);
-    printf("  CRC32: %08X\n", msg->crc32);
-    printf("  Dump:  ");
+void dumpMessage(Message *msg, FILE *outFile, const char *title, int count) {
+    fprintf(outFile, "[%d] %s:\n", count, title);
+    fprintf(outFile, "  Type: %d\n", msg->type);
+    fprintf(outFile, "  Payload length: %d\n", msg->payloadLength);
+    fprintf(outFile, "  Data length: %zu\n", msg->dataLength);
+    fprintf(outFile, "  Data pointer: %p\n", msg->data);
+    fprintf(outFile, "  CRC32: %08X\n", msg->crc32);
+    fprintf(outFile, "  Dump:  ");
     for(size_t i = 0; i < msg->dataLength; i++) {
-        printf("%02X ", msg->data[i]);
+        fprintf(outFile, "%02X ", msg->data[i]);
     }
-    printf("\n");
+    fprintf(outFile, "\n");
 }
 
 int readMask(FILE *inFile, uint32_t *mask) {
@@ -172,8 +175,7 @@ int readMask(FILE *inFile, uint32_t *mask) {
         }
         *mask = htonl(*mask);
 
-        printf("Got new mask:\n");
-        printf("  CRC32: %08X\n", *mask);
+        printf("Got new mask: %08X\n", *mask);
     }
 
     return 0;
@@ -237,7 +239,7 @@ int checkMessage(FILE *inFile) {
     // check for MSG_HEADER size as \r\n may appear at the end
     int rc = fread(msgHeader, sizeof(msgHeader[0]), sizeof(msgHeader) - 1, inFile) >= (sizeof(MSG_HEADER) - 1);
     if(!rc) {
-        return ERR_SYS_FILE_LENGTH;
+        return feof(inFile) ? ERR_SYS_FILE_EOF : ERR_SYS_FILE_LENGTH;
     }
 
     // -1 as line doesn't contain '\0'
@@ -250,6 +252,8 @@ int checkMessage(FILE *inFile) {
 }
 
 int parseMessages(FILE *inFile, FILE *outFile) {
+    int count = 0;
+
     // Reading Messages (one by one)
     int rc;
     while(!(rc = checkMessage(inFile))) {
@@ -275,7 +279,7 @@ int parseMessages(FILE *inFile, FILE *outFile) {
             break;
         }
 
-        dumpMessage(&msg);
+        dumpMessage(&msg, outFile, "Original message", count);
 
         uint32_t mask;
         rc = readMask(inFile, &mask);
@@ -300,12 +304,15 @@ int parseMessages(FILE *inFile, FILE *outFile) {
 
         applyMask(&msg, mask);
 
-        dumpMessage(&msg);
+        dumpMessage(&msg, outFile, "Updated message", count);
 
         free(msg.data);
+
+        count++;
     }
 
-    if(rc) {
+    // as EOF only occures before message read, always occures as file have \r\n at the end (or just \n)
+    if(rc && (ERR_SYS_FILE_EOF != rc)) {
         handleError(outFile, rc);
     }
 
