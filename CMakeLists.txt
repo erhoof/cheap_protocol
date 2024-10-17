@@ -5,6 +5,7 @@ set(SOURCES
     src/crc32.c
     src/essentials.c
     src/main.c
+    src/message.c
 )
 add_executable(${PROJECT_NAME} ${SOURCES})
 
