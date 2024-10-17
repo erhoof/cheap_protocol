@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
 
-            printf("Allocated %p of %zu bytes for message data\n", msg.data, msg.length);
+            printf("Allocated %p of %u bytes for message data\n", msg.data, msg.length);
 
             int rc = fread(dataHexString, sizeof(dataHexString[0]), lenInHEX, inFile);
             if(lenInHEX != rc) {
