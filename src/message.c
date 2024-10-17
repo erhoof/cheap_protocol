@@ -292,7 +292,6 @@ int parseMessages(FILE *inFile, FILE *outFile) {
         // End of message reading
         rc = checkCRC32(&msg);
         if(rc) {
-            fprintf(outFile, "Checksum verification failed");
             free(msg.data);
             break;
         }
